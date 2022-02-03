@@ -1,0 +1,7 @@
+{
+"table_in":"shtat.prohidna_reports",
+"fields_in":"pib,time_inout,rdate",
+"first_row":2,
+"cols":[2,3,"&filename"],
+"delete":" rdate='&filename'"
+}
