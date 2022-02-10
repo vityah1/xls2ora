@@ -1,5 +1,8 @@
-"""script for load data from xls file to oracle table
-Usage: xls2ora.exe file.xls (формату XLS або HTML)
+"""Utility for load [xls|xlsx|csv|html] to oracle table v.0.0.3
+
+Usage: xls2ora.exe file.ext|file.json
+
+file.ext [xls|xlsx|csv|html]
 
 Example config file:
 * - required fields
@@ -8,9 +11,11 @@ xls2ora.json =>
 {
 *"table_in":"shtat.shtat_reports",
 *"fields_in":"pib,time_inout,rdate",
+"file_in":"file.ext", * if arg file.json
 "first_row":2,
 "cols":[2,3,"&filename"],
-"format":"html|xls",
+"format":"html|xls|csv",
+"separator":",",
 "truncate":"Y|n",
 "delete":" rdate=\"&filename\""
 }        
@@ -19,18 +24,21 @@ xls2ora.json =>
 import os
 # from re import T
 import sys
-import xlrd, time
+import time
+import xlrd
+import openpyxl
+import bs4
 import requests
 from os import path
 # from sys import exit
 import json
 import traceback
 from funks import (
+    file2arr,
     sendicqmsg,
     nm,
     decl_log,
     myLog,
-    sec2hours,
     username,
     local_ip,
 )
@@ -96,63 +104,92 @@ def do_xls2ora():
         myLog("BEGIN")
         usage=__doc__
         try:    
-            xls_file = sys.argv[1:][0]
+            arg = sys.argv[1:][0]
         except:
             print(usage)
             return
             
-        if xls_file in ['/?','--help','-h']:
+        if arg in ['/?','--help','-h']:
             print(usage)
             return
         
-        myLog(f"Programm for load {xls_file} to oracle\n")
-        # usage = "xls2ora.exe {xls_file} формату [XLS]\n!!!"
+        myLog(f"Utility for load [xls|xlsx|csv|html] to oracle table\n")
+        # usage = "xls2ora.exe {filename} формату [XLS]\n!!!"
 
-        if not path.exists(xls_file):
-            myLog(f"""Input file [{xls_file}] not exists\n""",1)
+        if not path.exists(arg):
+            myLog(f"""Input file [{arg}] not exists\n""",1)
             print(usage)
-            sendicqmsg(1001,f"""Input file [{xls_file}] not exists""")
+            sendicqmsg(1001,f"""Input file [{arg}] not exists""")
             return
 
-        filename=os.path.basename(xls_file)
+        
+
+        if arg.find(".json")>-1:
+            json_file=arg
+        else:
+            json_file='xls2ora.json'
+
         try:
-            with open("xls2ora.json") as f:
+            with open(json_file,"r+") as f:
                 cfg = json.load(f)
         except Exception as e:
-            myLog(f"""cfg json file [xls2ora.json] not correct\n""",1)
+            myLog(f"""cfg json file [{json_file}] not valid\n{e}\n""",1)
             print(usage)
-            sendicqmsg(1001,f"""cfg json file [xls2ora.json] not correct\n{e}""")
+            sendicqmsg(1001,f"""cfg json file [{json_file}] not valid\n{e}""")
             return
 
         try:
             table_in=cfg["table_in"]
             fields_in=cfg["fields_in"]
+            
+            if arg.find(".json")>-1:
+                try:
+                    file_in=cfg["file_in"]
+                except:
+                    err=f'\nNot find key "file_in" in json file'
+                    myLog(err,1)
+                    print(err)
+                    sendicqmsg(1001,err)
+                    return
+            else:
+                file_in=arg
+            filename=os.path.basename(file_in)
+            
             first_row=cfg.get("first_row",1)
             cols=cfg.get("cols",[])
             format=cfg.get("format","xls")
             truncate=cfg.get("truncate","n")
+            separator=cfg.get("separator",",")
             delete=cfg.get("delete","")
         except Exception as e:
-            myLog(f"""not correct parameters in xls2ora.json\n""",1)
+            myLog(f"""not valid parameters in xls2ora.json\n""",1)
             print(usage)
-            sendicqmsg(1001,f"""not correct parameters in xls2ora.json\n{e}""")
+            sendicqmsg(1001,f"""not valid parameters in xls2ora.json\n{e}""")
             return
         
-        if format not in ['html','xls']:
-            myLog("\nformat not valid...",1)
+        if format not in ['html','xls','csv']:
+            myLog("\nformat not valid...\n",1)
             print(usage)
             return
 
+        if format == 'xls' and filename.find('.xlsx')>-1:
+            format='xlsx'
+
+        cols_all='N'
+        
         if not cols:
+            cols_all='Y'
             for i in range(1,len(fields_in.split(","))+1):
                 cols.append(i)
         
-        myLog(f"Opening {xls_file} file...\n",1)
+        myLog(f"Opening {filename} file...\n",1)
+
+        cnt_rows:int=0
+        data:list=[]
         
         if format=='html':
-            with open(xls_file,'r',encoding="utf-8") as f:
+            with open(file_in,'r',encoding="utf-8") as f:
                 s = f.read()
-            import bs4
             soup = bs4.BeautifulSoup(s, 'html.parser')
             myLog("Begin parce...",1)
 
@@ -161,7 +198,7 @@ def do_xls2ora():
             names=["html_table"]
         elif format=='xls':
             try:
-                wb = xlrd.open_workbook(xls_file)
+                wb = xlrd.open_workbook(file_in)
             except Exception as e:
                 myLog(f"""error open xls file\n{e}\n""",1)
                 sendicqmsg(1001,f"""error open xls file\n{e}""")
@@ -172,33 +209,74 @@ def do_xls2ora():
             myLog("Worksheet name(s): {0}".format(names),1)
             ws = wb.sheet_by_index(0)
             cnt_rows = ws.nrows - 1
+        elif format=='xlsx':
+            try:
+                wb = openpyxl.load_workbook(file_in, read_only=True, data_only=True)
+            except Exception as e:
+                myLog(f"""error open xls file\n{e}\n""",1)
+                sendicqmsg(1001,f"""error open xls file\n{e}""")
+                return                        
+            
+            names = wb.sheetnames
+            ws = wb[names[0]]
 
-        myLog(f"{cnt_rows} rows loaded from {xls_file}, sheet: {names[0]}",1)
+            # myLog("The number of worksheets is {0}".format(wb.nsheets),1)
+            myLog("Worksheet name(s): {0}".format(names),1)
+            # ws = wb.sheet_by_index(0)
+            cnt_rows = ws.max_row
+
+        elif format=="csv":
+            data=file2arr(file_in,separator)
+            cnt_rows=len(data)
+            names=["csv_table"]
+
+
+        myLog(f"\n{cnt_rows} rows will load from {filename}, sheet: {names[0]}\n",1)
 
         start_time_main = time.perf_counter()
-        data=[]
 
-        myLog("Get data from EXCEL...",1)
-        for i in range(first_row,cnt_rows+1):
-            row=[]
-            try:
-                for j in cols:
-                    if str(j).find('&filename')>-1:
-                        val=filename.replace('.xls','')
-                    else:
-                        if format=='xls':
-                            val=str(ws.cell(i, j-1).value).strip()
-                        elif format=='html':
-                            val=trs[i].find_all("td")[j-1].getText().strip()
-                    row.append(val)
 
-                data.append(row)
-            except:
-                pass
+        myLog(f"Get data from {filename}...",1)
+
+
+        if format=='xlsx' and cols_all=='Y':
+            for r,row in enumerate(ws):
+                if r<first_row:
+                    continue
+                if not any(cell.value for cell in row):
+                    break
+                data.append([str(cell.value) for cell in row])
+                myLog(f"row: {r}",2)                
+            # elif format=='xls':
+        else:
+            for i in range(first_row,cnt_rows+1):
+                row=[]
+                try:
+                    for j in cols:
+                        val=''
+                        if str(j).find('&filename')>-1:
+                            val=filename.replace('.xls','')
+                        else:
+                            if format=='xls':
+                                val=str(ws.cell(i, j-1).value).strip() if ws.cell(i, j-1).value else ''
+                            if format=='xlsx':
+                                val=str(ws.cell(row=i, column=j).value).strip() if ws.cell(row=i, column=j).value else ''
+                            elif format=='html':
+                                val=trs[i].find_all("td")[j-1].getText().strip()
+                            # elif format=='csv':
+                            #     val=csv[i][j-1].strip()
+                        if val:
+                            row.append(val)
+                    if not row:
+                        break
+                    data.append(row)
+                    myLog(f"row: {i}",2)
+                except:
+                    pass
 
        
         if truncate=="Y":
-            myLog(f"truncate {table_in}",1)
+            myLog(f"\ntruncate {table_in}\n",1)
             if truncate_table(table_in=table_in)<0:
                 return
         
