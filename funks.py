@@ -34,7 +34,7 @@ nm = os.path.basename(main.__file__).replace(".py", "")
 curdir = os.getcwd()
 
 
-def file2arr(filename=None, sep=","):
+def file2arr(filename=None, sep=",")->list:
     """read file to array with separator"""
     if path.exists(filename):
         myLog(f"Файл {filename} з вхідними даними знайдений. Продовжуємо...",1)
@@ -151,21 +151,21 @@ def sdatetime(dt=None):
         return dt.strftime("%d.%m.%Y %H:%M:%S")
 
 
-def myLog(txt="",*args):
+def myLog(txt="",arg=0):
     """пишем в лог файл. Якщо параметр то друкуємо на екрані"""
     error=0
-    
-    if txt == "BEGIN":
-        txt = f"\n{txt}"
-    elif txt == "END":
-        txt = f"{txt}\n"
-    else:
-        txt = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S") + f" {txt}"
+    if arg<2:
+        if txt == "BEGIN":
+            txt = f"\n{txt}"
+        elif txt == "END":
+            txt = f"{txt}\n"
+        else:
+            txt = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S") + f" {txt}"
 
-    with open(f"{nm}.log", "a") as f:
-        f.write(txt + "\n")
+        with open(f"{nm}.log", "a") as f:
+            f.write(txt + "\n")
     
-    if args:
+    if arg>0:
         # друкуємо на всю ширину консолі
         if len(txt)>=len_line:
             txt=txt[:len_line-1]
