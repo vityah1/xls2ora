@@ -293,7 +293,7 @@ def do_xls2ora():
 
         # total_time = sec2hours(sec)
 
-        msg = f"""total rows: [{cnt_rows}], total time: {end-start_time_main:0.7f} s\nresult: {res}"""
+        msg = f"""{filename}, total rows: [{cnt_rows}], total time: {end-start_time_main:0.7f} s\nresult: {res}"""
         myLog(msg,1)
         sendicqmsg(1001,msg)
         myLog("END")  

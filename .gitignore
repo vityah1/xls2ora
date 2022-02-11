@@ -19,3 +19,6 @@ py_inspector.py
 win_*
 *.xls
 *.xlsx
+*.csv
+*.json
+*.*.json
