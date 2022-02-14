@@ -265,8 +265,8 @@ def do_xls2ora():
                                 val=trs[i].find_all("td")[j-1].getText().strip()
                             # elif format=='csv':
                             #     val=csv[i][j-1].strip()
-                        if val:
-                            row.append(val)
+                        # if val:
+                        row.append(val)
                     if not row:
                         break
                     data.append(row)
