@@ -33,6 +33,8 @@ from os import path
 # from sys import exit
 import json
 import traceback
+from datetime import datetime
+
 from funks import (
     file2arr,
     sendicqmsg,
@@ -122,50 +124,64 @@ def do_xls2ora():
             sendicqmsg(1001,f"""Input file [{arg}] not exists""")
             return
 
-        
-
         if arg.find(".json")>-1:
             json_file=arg
         else:
             json_file='xls2ora.json'
 
-        try:
-            with open(json_file,"r+") as f:
-                cfg = json.load(f)
-        except Exception as e:
-            myLog(f"""cfg json file [{json_file}] not valid\n{e}\n""",1)
-            print(usage)
-            sendicqmsg(1001,f"""cfg json file [{json_file}] not valid\n{e}""")
-            return
-
-        try:
-            table_in=cfg["table_in"]
-            fields_in=cfg["fields_in"]
-            
-            if arg.find(".json")>-1:
-                try:
-                    file_in=cfg["file_in"]
-                except:
-                    err=f'\nNot find key "file_in" in json file'
-                    myLog(err,1)
-                    print(err)
-                    sendicqmsg(1001,err)
-                    return
-            else:
-                file_in=arg
+        create_table=0
+        if not path.exists(json_file):
+            myLog(f"""Create table mode\n""",1)
+            create_table=1
+        else:
+            try:
+                with open(json_file,"r+") as f:
+                    cfg = json.load(f)
+            except Exception as e:
+                myLog(f"""cfg json file [{json_file}] not valid\n{e}\n""",1)
+                print(usage)
+                sendicqmsg(1001,f"""cfg json file [{json_file}] not valid\n{e}""")
+                return
+        if create_table:
+            table_in=f"""cgi.tmp_{arg.replace('.xlsx','').replace('.xls','')}"""
+            format="xls"
+            cols=[1]
+            file_in=arg
             filename=os.path.basename(file_in)
-            
-            first_row=cfg.get("first_row",1)
-            cols=cfg.get("cols",[])
-            format=cfg.get("format","xls")
-            truncate=cfg.get("truncate","n")
-            separator=cfg.get("separator",",")
-            delete=cfg.get("delete","")
-        except Exception as e:
-            myLog(f"""not valid parameters in xls2ora.json\n""",1)
-            print(usage)
-            sendicqmsg(1001,f"""not valid parameters in xls2ora.json\n{e}""")
-            return
+            first_row=1
+            truncate="N"
+            delete=""
+            # fields_in=cfg["fields_in"]
+        else:
+            try:
+                table_in=cfg["table_in"]
+                fields_in=cfg["fields_in"]
+                
+                if arg.find(".json")>-1:
+                    try:
+                        file_in=cfg["file_in"]
+                    except:
+                        err=f'\nNot find key "file_in" in json file, append mode'
+                        myLog(err,1)
+                        print(err)
+                        file_in=arg
+                        # sendicqmsg(1001,err)
+                        # return
+                else:
+                    file_in=arg
+                filename=os.path.basename(file_in)
+                
+                first_row=cfg.get("first_row",1)
+                cols=cfg.get("cols",[])
+                format=cfg.get("format","xls")
+                truncate=cfg.get("truncate","n")
+                separator=cfg.get("separator",",")
+                delete=cfg.get("delete","")
+            except Exception as e:
+                myLog(f"""not valid parameters in xls2ora.json\n""",1)
+                print(usage)
+                sendicqmsg(1001,f"""not valid parameters in xls2ora.json\n{e}""")
+                return
         
         if format not in ['html','xls','csv']:
             myLog("\nformat not valid...\n",1)
@@ -181,6 +197,9 @@ def do_xls2ora():
             cols_all='Y'
             for i in range(1,len(fields_in.split(","))+1):
                 cols.append(i)
+        
+        if create_table==1:
+            cols_all='Y'
         
         myLog(f"Opening {filename} file...\n",1)
 
@@ -241,11 +260,32 @@ def do_xls2ora():
 
         if format=='xlsx' and cols_all=='Y':
             for r,row in enumerate(ws):
+                if r==0 and create_table==1:
+                    columns=[]
+                    cols=[]
+                    cols=[str(cell.value).lower().strip() for cell in row]
+                    columns.append(f"create table {table_in} (")
+                    for col in cols:
+                        columns.append(f"{col} varchar2 (255),") if col!='none' else ""
+                        
+                    fields_in=",".join(cols).replace(",none","")
+                    columns[-1]= columns[-1].replace(",","")
+                    columns.append(")")
+                    sql="".join(columns)
+                    if request_api({"action":"sql","sql":sql})<0:
+                        truncate="Y"
+
                 if r<first_row:
                     continue
                 if not any(cell.value for cell in row):
                     break
-                data.append([str(cell.value) for cell in row])
+                row=[]
+                for cell in row:
+                    if isinstance(cell.value,datetime):
+                        row.append(cell.value.strftime('%d.%m.%Y %H:%M:%S'))
+                    else:
+                        row.append()
+                data.append(row)
                 myLog(f"row: {r}",2)                
             # elif format=='xls':
         else:
@@ -258,15 +298,20 @@ def do_xls2ora():
                             val=filename.replace('.xls','')
                         else:
                             if format=='xls':
-                                val=str(ws.cell(i, j-1).value).strip() if ws.cell(i, j-1).value else ''
+                                val=ws.cell(i-1, j-1).value if ws.cell(i-1, j-1).value else ''
                             if format=='xlsx':
-                                val=str(ws.cell(row=i, column=j).value).strip() if ws.cell(row=i, column=j).value else ''
+                                val=ws.cell(row=i, column=j).value if ws.cell(row=i, column=j).value else ''
                             elif format=='html':
                                 val=trs[i].find_all("td")[j-1].getText().strip()
                             # elif format=='csv':
                             #     val=csv[i][j-1].strip()
                         # if val:
-                        row.append(val)
+                        if isinstance(val,datetime):
+                            row.append(val.strftime('%d.%m.%Y %H:%M:%S'))
+                        elif isinstance(val,(int,float)):
+                            row.append('{0:.2f}'.format(val).rstrip('0').rstrip('.'))
+                        else:
+                            row.append(val)
                     if not row:
                         break
                     data.append(row)
