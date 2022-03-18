@@ -1,7 +1,7 @@
 {
-    "table_in":"SHTAT.COMPCARDS_PB_USERS",
-    "fields_in":"USERID,C_STI,PIB,DEP,NAME_DEP,POSADA,NAPRYAM,DBEGIN,DEND,DPRIYOM,DZVILNENNYA,C_DPS,NAME_C_DPS,DINFORM,USERNAME",
-    "first_row":1,
-"format":"html",
-"truncate":"Y"
+"table_in":"cgi.tmp_kor",
+"fields_in":"c_raj,kod,vb,shot,idparm_54,idparm_120,idparm_123,idparm_119,idparm_58,idparm_76,idparm_104,rdate",
+"first_row":2
 }
+
+
