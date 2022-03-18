@@ -22,3 +22,4 @@ win_*
 *.csv
 *.json
 *.*.json
+*.json.bak
