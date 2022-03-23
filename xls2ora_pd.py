@@ -17,7 +17,9 @@ xls2ora.json =>
 "format":"html|xls|csv",
 "separator":",",
 "truncate":"Y|n",
-"delete":" rdate=\"&filename\""
+"delete":" rdate=\"&filename\"",
+"required_col":3,
+"types":{6:"float",7:"float",8:"float",9:"float",10:"float",11:"float",12:"float"}
 }        
 """
 
@@ -178,6 +180,8 @@ def do_xls2ora():
                 truncate=cfg.get("truncate","n")
                 separator=cfg.get("separator",",")
                 delete=cfg.get("delete","")
+                required_col=cfg.get("required_col",None)
+                types=cfg.get("types",{})
             except Exception as e:
                 myLog(f"""not valid parameters in xls2ora.json\n""",1)
                 print(usage)
@@ -208,14 +212,10 @@ def do_xls2ora():
         data:list=[]
         
         if format=='html':
-            with open(file_in,'r',encoding="utf-8") as f:
-                s = f.read()
-            soup = bs4.BeautifulSoup(s, 'html.parser')
-            myLog("Begin parce...",1)
 
-            trs=soup.find_all('tr')
-            cnt_rows=len(trs)
-            names=["html_table"]
+            table_MN = pd.read_html(file_in,decimal=',',thousands='.')
+            df = table_MN[0]
+            cnt_rows=len(df)
         elif format in ('xls','xlsx'):
             try:
                 df = pd.read_excel(file_in,sheet_name=0)
@@ -243,9 +243,9 @@ def do_xls2ora():
 
         myLog(f"Load data from {filename}...",1)
 
+        # types_of_columns=df.dtypes
 
-
-        if format in ('xlsx','xls') and cols_all=='Y':
+        if format in ('xlsx','xls','html') and cols_all=='Y':
 
             for r, df_row in df.iterrows():
                 # print(row["c1"], row["c2"])
@@ -282,23 +282,36 @@ def do_xls2ora():
             # elif format=='xls':
         else:
             for i, df_row in df.iterrows():
+                if i<first_row-1:
+                    continue
             # for i in range(first_row,cnt_rows+1):
                 row=[]
                 try:
                     for j in cols:
+                        not_required_value=0
                         val=''
                         if str(j).find('&filename')>-1:
                             val=filename.replace('.xls','')
                         else:
-                            if format in ('xls','xlsx'):
-                                val=df_row[fields_in[j-1]]
+                            if format in ('xls','xlsx','html'):
+                                val=df_row[j-1]
                             # if format=='xlsx':
                             #     val=ws.cell(row=i, column=j).value if ws.cell(row=i, column=j).value else ''
-                            elif format=='html':
-                                val=trs[i].find_all("td")[j-1].getText().strip()
+                            # elif format=='html':
+                            #     val=trs[i].find_all("td")[j-1].getText().strip()
                             # elif format=='csv':
                             #     val=csv[i][j-1].strip()
                         # if val:
+                        if required_col==j-1 and pd.isnull(val):
+                            not_required_value=1
+                            break
+                        
+                        if pd.isnull(val) and types.get(str(j-1))=='float':
+                            val=0
+
+                        if isinstance(val,(str)) and types.get(str(j-1))=='float':
+                            val=float(val.replace(',','.'))
+                        
                         if isinstance(val,datetime):
                             # row.append(val.strftime('%d.%m.%Y %H:%M:%S'))
                             row.append(val.strftime('%d.%m.%Y'))
@@ -307,6 +320,8 @@ def do_xls2ora():
                         else:
                             row.append(val)
                     if not row:
+                        break
+                    if not_required_value:
                         break
                     data.append(row)
                     myLog(f"row: {i}",2)
