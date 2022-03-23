@@ -158,6 +158,7 @@ def do_xls2ora():
                 fields_in=cfg["fields_in"]
                 
                 if arg.find(".json")>-1:
+                    format=''
                     try:
                         file_in=cfg["file_in"]
                     except:
@@ -169,11 +170,13 @@ def do_xls2ora():
                         # return
                 else:
                     file_in=arg
+                    format='.'.split(file_in)[-1]
                 filename=os.path.basename(file_in)
                 
                 first_row=cfg.get("first_row",1)
                 cols=cfg.get("cols",[])
-                format=cfg.get("format","xls")
+                if not format:
+                    format=cfg.get("format","xls")
                 truncate=cfg.get("truncate","n")
                 separator=cfg.get("separator",",")
                 delete=cfg.get("delete","")
