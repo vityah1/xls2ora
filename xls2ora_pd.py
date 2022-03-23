@@ -224,10 +224,6 @@ def do_xls2ora():
                 sendicqmsg(1001,f"""error open xls file\n{e}""")
                 return                        
             
-            # names = wb.sheet_names()
-            # myLog("The number of worksheets is {0}".format(wb.nsheets),1)
-            # myLog("Worksheet name(s): {0}".format(names),1)
-            # ws = wb.sheet_by_index(0)
             cnt_rows = len(df)
 
         elif format=="csv":
@@ -243,7 +239,6 @@ def do_xls2ora():
 
         myLog(f"Load data from {filename}...",1)
 
-        # types_of_columns=df.dtypes
 
         if format in ('xlsx','xls','html') and cols_all=='Y':
 
@@ -273,13 +268,11 @@ def do_xls2ora():
                 row=[]
                 for cell in df_row:
                     if isinstance(cell,datetime):
-                        # row.append(cell.strftime('%d.%m.%Y %H:%M:%S'))
                         row.append(cell.strftime('%d.%m.%Y'))
                     else:
                         row.append(cell)
                 data.append(row)
                 myLog(f"row: {r}",2)                
-            # elif format=='xls':
         else:
             for i, df_row in df.iterrows():
                 if i<first_row-1:
@@ -295,13 +288,7 @@ def do_xls2ora():
                         else:
                             if format in ('xls','xlsx','html'):
                                 val=df_row[j-1]
-                            # if format=='xlsx':
-                            #     val=ws.cell(row=i, column=j).value if ws.cell(row=i, column=j).value else ''
-                            # elif format=='html':
-                            #     val=trs[i].find_all("td")[j-1].getText().strip()
-                            # elif format=='csv':
-                            #     val=csv[i][j-1].strip()
-                        # if val:
+
                         if required_col==j-1 and pd.isnull(val):
                             not_required_value=1
                             break
