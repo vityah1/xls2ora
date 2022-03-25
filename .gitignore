@@ -23,3 +23,7 @@ win_*
 *.json
 *.*.json
 *.json.bak
+*.html
+*.htm
+*.xml
+*.css
