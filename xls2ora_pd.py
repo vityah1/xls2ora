@@ -12,10 +12,8 @@ xls2ora.json =>
 *"table_in":"shtat.shtat_reports",
 *"fields_in":"pib,time_inout,rdate",
 "file_in":"file.ext", * if arg file.json
-"first_row":2,
 "cols":[2,3,"&filename"],
 "format":"html|xls|csv",
-"separator":",",
 "truncate":"Y|n",
 "delete":" rdate=\"&filename\"",
 "required_col":3,
@@ -24,22 +22,18 @@ xls2ora.json =>
 """
 
 import os
-# from re import T
 import sys
 import time
 import pandas as pd
-# import xlrd
-# import openpyxl
-import bs4
 import requests
 from os import path
-# from sys import exit
 import json
 import traceback
 from datetime import datetime
+from transliterate import translit
 
 from funks import (
-    file2arr,
+    # file2arr,
     sendicqmsg,
     nm,
     decl_log,
@@ -51,7 +45,7 @@ from funks import (
 url_api = "http://10.9.19.15:5000/api"
 headers = {"Content-Type": "application/json; charset=ISO-8859-1"}
 proxies = {"http": "", "https": ""}
-
+valid_formats=['html','xls','xlsx','csv']
 
 def truncate_table(table_in="",delete=""):
     um_delete=""
@@ -98,13 +92,13 @@ def request_api(json_data):
                 return -1
             else:
                 myLog(f"sql Ok: {data['cnt']} rows",1)
-                return 1
+                return data['cnt']
         except Exception as e:
             myLog(f"""error get json: {e}""",1)
             return -1
 
 
-def do_xls2ora():
+def main():
     try:
         myLog("BEGIN")
         usage=__doc__
@@ -145,15 +139,20 @@ def do_xls2ora():
                 print(usage)
                 sendicqmsg(1001,f"""cfg json file [{json_file}] not valid\n{e}""")
                 return
+        
         if create_table:
-            table_in=f"""cgi.tmp_{arg.replace('.xlsx','').replace('.xls','')}"""
-            format="xls"
+            # if not find xls2ora.json file
+            extention=arg.split(".")[-1]
+            table_in=f"""cgi.tmp_{arg.replace(f'.{extention}','')}"""
+            format=extention
             cols=[1]
             file_in=arg
             filename=os.path.basename(file_in)
-            first_row=1
+            # first_row=1
             truncate="N"
             delete=""
+            required_col=0
+            
             # fields_in=cfg["fields_in"]
         else:
             try:
@@ -172,15 +171,17 @@ def do_xls2ora():
                         # return
                 else:
                     file_in=arg
+                
+                extention=file_in.split(".")[-1]
                 filename=os.path.basename(file_in)
                 
-                first_row=cfg.get("first_row",1)
+                # first_row=cfg.get("first_row",1)
                 cols=cfg.get("cols",[])
-                format=cfg.get("format","xls")
+                format=cfg.get("format",extention)
                 truncate=cfg.get("truncate","n")
-                separator=cfg.get("separator",",")
+                # separator=cfg.get("separator",",")
                 delete=cfg.get("delete","")
-                required_col=cfg.get("required_col",None)
+                required_col=cfg.get("required_col",0)
                 types=cfg.get("types",{})
             except Exception as e:
                 myLog(f"""not valid parameters in xls2ora.json\n""",1)
@@ -188,13 +189,13 @@ def do_xls2ora():
                 sendicqmsg(1001,f"""not valid parameters in xls2ora.json\n{e}""")
                 return
         
-        if format not in ['html','xls','csv']:
+        if format not in valid_formats:
             myLog("\nformat not valid...\n",1)
             print(usage)
             return
 
-        if format == 'xls' and filename.find('.xlsx')>-1:
-            format='xlsx'
+        # if format == 'xls' and filename.find('.xlsx')>-1:
+        #     format='xlsx'
 
         cols_all='N'
         
@@ -210,112 +211,87 @@ def do_xls2ora():
 
         cnt_rows:int=0
         data:list=[]
-        
-        if format=='html':
-
-            table_MN = pd.read_html(file_in,decimal=',',thousands='.')
-            df = table_MN[0]
-            cnt_rows=len(df)
-        elif format in ('xls','xlsx'):
-            try:
+        try:
+            if format=='html':
+                df = pd.read_html(file_in,decimal=',',thousands='.')[0]
+            elif format in ('xls','xlsx'):
                 df = pd.read_excel(file_in,sheet_name=0)
-            except Exception as e:
-                myLog(f"""error open xls file\n{e}\n""",1)
-                sendicqmsg(1001,f"""error open xls file\n{e}""")
-                return                        
-            
-            cnt_rows = len(df)
+            elif format=="csv":
+                df = pd.read_csv(file_in)
+        except Exception as e:
+            myLog(f"""error open {file_in} file\n{e}\n""",1)
+            sendicqmsg(1001,f"""error {file_in} xls file\n{e}""")
+            return                        
 
-        elif format=="csv":
-            data=file2arr(file_in,separator)
-            cnt_rows=len(data)
-            names=["csv_table"]
-
-
-        myLog(f"\n{cnt_rows} rows will load from {filename}\n",1)
+        cnt_rows = len(df)
+        myLog(f"\n{cnt_rows} rows readed from {filename}\n",1)
 
         start_time_main = time.perf_counter()
 
 
         myLog(f"Load data from {filename}...",1)
 
+        if cols_all=='Y':
+            fields=[]
+            fields=[translit(str(cell),'uk', reversed=True).lower().replace('№','npp')[:30].replace(',','_').replace('.','').replace(' ','_').replace('"','').replace("'",'').replace('(','_').replace(')','_').strip() for cell in df.T.axes[0]]            
+            cols=[*range(1,len(fields)+1)]
 
-        if format in ('xlsx','xls','html') and cols_all=='Y':
+        if create_table==1:
+            maxColumnLenghts = []
+            for col in range(len(df.columns)):
+                maxColumnLenghts.append(max(df.iloc[:,col].astype(str).apply(len)))
+            columns=[]
 
-            for r, df_row in df.iterrows():
-                # print(row["c1"], row["c2"])
+            columns.append(f"create table {table_in} (")
+            for i,col in enumerate(fields,0):
+                columns.append(f"{col} varchar2 ({maxColumnLenghts[i]}),") if col!='none' else ""
+                
+            fields_in=",".join(fields).replace(",none","")
+            columns[-1]= columns[-1].replace(",","")
+            columns.append(")")
+            sql="".join(columns)
+            res=request_api({"action":"sql","sql":sql})
+            if res<0:
+                myLog(f"error create table {table_in}")            
 
-            # for r,row in enumerate(df):
-                if r==0 and create_table==1:
-                    columns=[]
-                    cols=[]
-                    cols=[str(cell.value).lower().strip() for cell in row]
-                    columns.append(f"create table {table_in} (")
-                    for col in cols:
-                        columns.append(f"{col} varchar2 (255),") if col!='none' else ""
-                        
-                    fields_in=",".join(cols).replace(",none","")
-                    columns[-1]= columns[-1].replace(",","")
-                    columns.append(")")
-                    sql="".join(columns)
-                    if request_api({"action":"sql","sql":sql})<0:
-                        truncate="Y"
-
-                if r<first_row-1:
-                    continue
-                if not any(cell for cell in df_row):
-                    break
-                row=[]
-                for cell in df_row:
-                    if isinstance(cell,datetime):
-                        row.append(cell.strftime('%d.%m.%Y'))
+        for i, df_row in df.iterrows():
+            row=[]
+            try:
+                for j in cols:
+                    not_required_value=0
+                    val=''
+                    if str(j).find('&filename')>-1:
+                        val=filename.replace(f'.{extention}','')
                     else:
-                        row.append(cell)
+                        val=df_row[j-1]
+
+                    if required_col==j-1 and pd.isnull(val):
+                        not_required_value=1
+                        break
+                    
+                    if pd.isnull(val) and types.get(str(j-1))=='float':
+                        val=0
+
+                    if isinstance(val,(str)) and types.get(str(j-1))=='float':
+                        val=float(val.replace(',','.'))
+                    
+                    if isinstance(val,datetime):
+                        # row.append(val.strftime('%d.%m.%Y %H:%M:%S'))
+                        row.append(val.strftime('%d.%m.%Y'))
+                    elif isinstance(val,(int,float)):
+                        row.append('{0:.2f}'.format(val).rstrip('0').rstrip('.'))
+                    else:
+                        row.append(val)
+                if not row:
+                    break
+                if not_required_value:
+                    break
                 data.append(row)
-                myLog(f"row: {r}",2)                
-        else:
-            for i, df_row in df.iterrows():
-                if i<first_row-1:
-                    continue
-            # for i in range(first_row,cnt_rows+1):
-                row=[]
-                try:
-                    for j in cols:
-                        not_required_value=0
-                        val=''
-                        if str(j).find('&filename')>-1:
-                            val=filename.replace('.xls','')
-                        else:
-                            if format in ('xls','xlsx','html'):
-                                val=df_row[j-1]
-
-                        if required_col==j-1 and pd.isnull(val):
-                            not_required_value=1
-                            break
-                        
-                        if pd.isnull(val) and types.get(str(j-1))=='float':
-                            val=0
-
-                        if isinstance(val,(str)) and types.get(str(j-1))=='float':
-                            val=float(val.replace(',','.'))
-                        
-                        if isinstance(val,datetime):
-                            # row.append(val.strftime('%d.%m.%Y %H:%M:%S'))
-                            row.append(val.strftime('%d.%m.%Y'))
-                        elif isinstance(val,(int,float)):
-                            row.append('{0:.2f}'.format(val).rstrip('0').rstrip('.'))
-                        else:
-                            row.append(val)
-                    if not row:
-                        break
-                    if not_required_value:
-                        break
-                    data.append(row)
-                    myLog(f"row: {i}",2)
-                except:
-                    pass
-
+                myLog(f"row: {i}",2)
+            except:
+                pass
        
+        myLog(f"\n{len(data)} rows prepeared for load to {table_in}\n",1)
         if truncate=="Y":
             myLog(f"\ntruncate {table_in}\n",1)
             if truncate_table(table_in=table_in)<0:
@@ -329,12 +305,12 @@ def do_xls2ora():
                 return            
 
         myLog(f"send data to {table_in}...",1)
-        res=ins_to_ora(data_in=data,table_in=table_in,fields_in=fields_in)
+        res = ins_to_ora(data_in=data,table_in=table_in,fields_in=fields_in)
         end = time.perf_counter()
 
         # total_time = sec2hours(sec)
 
-        msg = f"""{filename}, total rows: [{cnt_rows}], total time: {end-start_time_main:0.7f} s\nresult: {res}"""
+        msg = f"""{filename} -> {table_in}, loaded rows: [{res}], total time: {end-start_time_main:0.7f} s\nresult: {res}"""
         myLog(msg,1)
         sendicqmsg(1001,msg)
         myLog("END")  
@@ -343,9 +319,6 @@ def do_xls2ora():
         e = traceback.format_exc()
         myLog(e,1)
         sendicqmsg(1001,e)
-
-def main():
-    do_xls2ora()
 
 if __name__ == "__main__":
     main()
