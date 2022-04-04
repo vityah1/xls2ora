@@ -24,8 +24,11 @@ xls2ora.json =>
 import os
 import sys
 import time
-import pandas as pd
+import re
+# import pandas as pd
+from pandas import read_excel,read_csv,read_html,isnull
 import requests
+import cx_Oracle
 from os import path
 import json
 import traceback
@@ -46,7 +49,20 @@ url_api = "http://10.9.19.15:5000/api"
 headers = {"Content-Type": "application/json; charset=ISO-8859-1"}
 proxies = {"http": "", "https": ""}
 valid_formats=['html','xls','xlsx','csv']
+cursor=None
 
+def cnn2ora(ora_user='',ora_pwd='',ora_dsn=''):
+    try:
+        connection = cx_Oracle.connect(user=ora_user, password=ora_pwd,
+                                dsn=ora_dsn,
+                                #encoding="UTF-8"
+                                )
+        cursor = connection.cursor()
+    except Exception as e:
+        myLog(f"error {e}",1)
+        cursor=None
+
+    return cursor
 
 def get_columns_name(full_table_in):
     owner,table_in=full_table_in.split('.')
@@ -87,12 +103,64 @@ def ins_to_ora(data_in=[],table_in='',fields_in=''):
     return request_api(json_data)[0]
     # url = f"""http://127.0.0.1:5000/api"""
 
+def do_sql_cmd(json_data={}):
+
+    global cursor
+
+    if json_data['action']=='executemany':
+        cols=[]
+        for j,col in enumerate(json_data['data'][0],1):
+            cols.append(':'+str(j))
+        values=','.join(cols)
+        cursor.executemany(f"insert into {json_data['table']} ({','.join(json_data['fields'])}) values ({values})", json_data['data'])
+        cnt=cursor.rowcount
+        cursor.execute('commit')
+        return cnt,[]
+
+    sql=json_data['sql'].strip()
+    if re.search(r'^select|^with', sql, flags=re.I):
+        try:
+            # cursor=db.engine().execute('select sysdate as curdate from dual')
+            result = cursor.execute(sql)
+        except Exception as e:
+            myLog(f'''error exec sql:\n{e}''')
+            return -1,[[f'''error: {e}''']]
+
+        result_0 = []
+        for el in result:
+            result_0.append(list(el))
+
+        cnt = result.rowcount
+
+        try:
+            return cnt,result_0
+        except Exception as e:
+            myLog(f'''error return jsonify:\nerror: [{e}]\nresult_0: {result_0[0]}''')
+            return -1,[[f'''error: {e}''']]
+    elif re.search(r'^insert|^update|^create|^delete|^merge|^truncate', sql, flags=re.I):
+        try:
+            cursor.execute(sql)
+            cnt = cursor.rowcount
+            cursor.execute('commit')
+            return cnt,[[f'''Affected {cnt} rows''']]
+        except Exception as e:
+            myLog(f'''error exec sql:\n{e}''')
+            return -1, [[f'''Error: {e}''']]
+            # return jsonify({"error":f'''error execute sql. error: {e}'''})
+    else:
+        myLog(f'''sql: {sql}''')
+        return -1, [[f'''Not valid sql''']]
+
+
 def request_api(json_data):
+    global cursor
     
     json_data["src"]= nm
     json_data["username"]= username
     json_data["user_ip"]= local_ip
 
+    if cursor is not None:
+        return do_sql_cmd(json_data=json_data)
 
     try:
         resp=requests.post(url_api,json=json_data, headers=headers,proxies=proxies)
@@ -122,6 +190,7 @@ def main():
     try:
         myLog("BEGIN")
         usage=__doc__
+        global cursor
         try:    
             arg = sys.argv[1:][0]
         except:
@@ -159,6 +228,16 @@ def main():
                 print(usage)
                 sendicqmsg(1001,f"""cfg json file [{json_file}] not valid\n{e}""")
                 return
+
+        try:
+            ora_user=cfg.get('ora_user','')
+            ora_pwd=cfg.get('ora_pwd','')
+            ora_dsn=cfg.get('ora_dsn','')
+
+            if any([ora_user,ora_pwd,ora_dsn]):
+                cursor=cnn2ora(ora_user=ora_user,ora_pwd=ora_pwd,ora_dsn=ora_dsn)        
+        except:
+            pass
         
         if create_table:
             # if not find xls2ora.json file
@@ -238,11 +317,11 @@ def main():
         data:list=[]
         try:
             if format=='html':
-                df = pd.read_html(file_in,decimal=',',thousands='.')[0]
+                df = read_html(file_in,decimal=',',thousands='.')[0]
             elif format in ('xls','xlsx'):
-                df = pd.read_excel(file_in,sheet_name=0)
+                df = read_excel(file_in,sheet_name=0)
             elif format=="csv":
-                df = pd.read_csv(file_in)
+                df = read_csv(file_in)
         except Exception as e:
             myLog(f"""error open {file_in} file\n{e}\n""",1)
             sendicqmsg(1001,f"""error {file_in} xls file\n{e}""")
@@ -289,30 +368,30 @@ def main():
                         val=filename.replace(f'.{extention}','')
                     else:
                         val=df_row[j-1]
-                    if required_col==j-1 and pd.isnull(val):
+                    if required_col==j-1 and isnull(val):
                         not_required_value=1
                         break
-                    if pd.isnull(val) and types.get(str(j))=='float':
+                    if isnull(val) and types.get(str(j))=='float':
                         val=0
                     elif isinstance(val,(int,float)):
-                        if types.get(str(j))=='str' and (val==0 or pd.isnull(val)):
+                        if types.get(str(j))=='str' and (val==0 or isnull(val)):
                             val=''
                         else:
-                            if pd.isnull(val):
+                            if isnull(val):
                                 val=0
                             else:
                                 val='{0:.2f}'.format(val).rstrip('0').rstrip('.')                        
                     elif isinstance(val,(str)) and types.get(str(j))=='float':
                         val=float(val.replace(',','.'))
                     elif isinstance(val,datetime):
-                        if pd.isnull(val):
+                        if isnull(val):
                             val=''
                         else:                        
                         # row.append(val.strftime('%d.%m.%Y %H:%M:%S'))
                             val=val.strftime('%d.%m.%Y')
                     
-                    # elif pd.isnull(val) and isinstance(val,(str)):
-                    elif pd.isnull(val):
+                    # elif isnull(val) and isinstance(val,(str)):
+                    elif isnull(val):
                         val=''
                     
                     if not isinstance(val,(str)):
