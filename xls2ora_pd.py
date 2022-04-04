@@ -47,12 +47,32 @@ headers = {"Content-Type": "application/json; charset=ISO-8859-1"}
 proxies = {"http": "", "https": ""}
 valid_formats=['html','xls','xlsx','csv']
 
+
+def get_columns_name(full_table_in):
+    owner,table_in=full_table_in.split('.')
+    sql=f"""SELECT column_name,data_type FROM all_tab_cols WHERE UPPER(table_name) = UPPER('{table_in}') and column_name!='ID' 
+and UPPER(owner)=UPPER('{owner}')
+order by column_id
+"""
+    cnt,res=request_api({"sql":sql,"action":"sql"})
+    fields_arr=[]
+    types={}
+    for i,r in enumerate(res,1):
+        if r[1]=='ID':
+            continue
+        fields_arr.append(r[0])
+        if r[1] in ('NUMBER','INTEGER'):
+            types[str(i)]='float'
+
+    fields=','.join(fields_arr)
+    return fields,types
+
 def truncate_table(table_in="",delete=""):
     um_delete=""
     if delete:
         um_delete=f" where {delete}".replace('"','\"')
     json={"action":"sql","sql":f"delete from {table_in} {um_delete}"}
-    return request_api(json)
+    return request_api(json)[0]
 
 def ins_to_ora(data_in=[],table_in='',fields_in=''):
     if not data_in or not table_in or not fields_in:
@@ -64,7 +84,7 @@ def ins_to_ora(data_in=[],table_in='',fields_in=''):
         "fields":fields_in,
         "data":data_in,}
     
-    return request_api(json_data)
+    return request_api(json_data)[0]
     # url = f"""http://127.0.0.1:5000/api"""
 
 def request_api(json_data):
@@ -78,24 +98,24 @@ def request_api(json_data):
         resp=requests.post(url_api,json=json_data, headers=headers,proxies=proxies)
     except Exception as e:
         myLog(f"error request api: {e}",1)
-        return -1
+        return -1,[]
 
     myLog(f"resp.status: {resp.status_code}")
     if resp.status_code != 200:
         myLog(f"error resp.status: {resp.status_code}",1)
-        return -1
+        return -1,[]
     else:
         try:
             data = resp.json()
             if data["cnt"]<0:
                 myLog(f"""error exec sql: {data['result'][0][0]}""",1)
-                return -1
+                return -1,[]
             else:
                 myLog(f"sql Ok: {data['cnt']} rows",1)
-                return data['cnt']
+                return data['cnt'],data['result']
         except Exception as e:
             myLog(f"""error get json: {e}""",1)
-            return -1
+            return -1,[]
 
 
 def main():
@@ -144,6 +164,7 @@ def main():
             # if not find xls2ora.json file
             extention=arg.split(".")[-1]
             table_in=f"""cgi.tmp_{arg.replace(f'.{extention}','')}"""
+            fields_in=''
             format=extention
             cols=[1]
             file_in=arg
@@ -152,12 +173,13 @@ def main():
             truncate="N"
             delete=""
             required_col=0
+            types={}
             
             # fields_in=cfg["fields_in"]
         else:
             try:
                 table_in=cfg["table_in"]
-                fields_in=cfg["fields_in"]
+                fields_in=cfg.get("fields_in","")
                 
                 if arg.find(".json")>-1:
                     try:
@@ -197,6 +219,9 @@ def main():
         # if format == 'xls' and filename.find('.xlsx')>-1:
         #     format='xlsx'
 
+        if not fields_in and create_table!=1:
+            fields_in,types=get_columns_name(table_in)
+
         cols_all='N'
         
         if not cols:
@@ -231,9 +256,9 @@ def main():
 
         myLog(f"Load data from {filename}...",1)
 
-        if cols_all=='Y':
+        if cols_all=='Y' and not fields_in:
             fields=[]
-            fields=[translit(str(cell),'uk', reversed=True).lower().replace('№','npp')[:30].replace(',','_').replace('.','').replace(' ','_').replace('"','').replace("'",'').replace('(','_').replace(')','_').strip() for cell in df.T.axes[0]]            
+            fields=[translit(str(cell),'uk', reversed=True).lower().replace('№','npp')[:30].replace('/','_').replace('’','').replace(',','_').replace('.','').replace(' ','_').replace('"','').replace("'",'').replace('(','_').replace(')','_').strip() for cell in df.T.axes[0]]            
             cols=[*range(1,len(fields)+1)]
 
         if create_table==1:
@@ -250,7 +275,7 @@ def main():
             columns[-1]= columns[-1].replace(",","")
             columns.append(")")
             sql="".join(columns)
-            res=request_api({"action":"sql","sql":sql})
+            res=request_api({"action":"sql","sql":sql})[0]
             if res<0:
                 myLog(f"error create table {table_in}")            
 
@@ -264,28 +289,45 @@ def main():
                         val=filename.replace(f'.{extention}','')
                     else:
                         val=df_row[j-1]
-
                     if required_col==j-1 and pd.isnull(val):
                         not_required_value=1
                         break
-                    
-                    if pd.isnull(val) and types.get(str(j-1))=='float':
+                    if pd.isnull(val) and types.get(str(j))=='float':
                         val=0
-
-                    if isinstance(val,(str)) and types.get(str(j-1))=='float':
-                        val=float(val.replace(',','.'))
-                    
-                    if isinstance(val,datetime):
-                        # row.append(val.strftime('%d.%m.%Y %H:%M:%S'))
-                        row.append(val.strftime('%d.%m.%Y'))
                     elif isinstance(val,(int,float)):
-                        row.append('{0:.2f}'.format(val).rstrip('0').rstrip('.'))
-                    else:
-                        row.append(val)
+                        if types.get(str(j))=='str' and (val==0 or pd.isnull(val)):
+                            val=''
+                        else:
+                            if pd.isnull(val):
+                                val=0
+                            else:
+                                val='{0:.2f}'.format(val).rstrip('0').rstrip('.')                        
+                    elif isinstance(val,(str)) and types.get(str(j))=='float':
+                        val=float(val.replace(',','.'))
+                    elif isinstance(val,datetime):
+                        if pd.isnull(val):
+                            val=''
+                        else:                        
+                        # row.append(val.strftime('%d.%m.%Y %H:%M:%S'))
+                            val=val.strftime('%d.%m.%Y')
+                    
+                    # elif pd.isnull(val) and isinstance(val,(str)):
+                    elif pd.isnull(val):
+                        val=''
+                    
+                    if not isinstance(val,(str)):
+                        if types.get(str(j))!='float':
+                            val=str(val)
+                    
+                    # if not isinstance(val,(str)):
+                    #     print(f"\nj: {j}, val: {val}, type not STR, type: {type(val)}\n")
+                    
+                    row.append(val)
                 if not row:
                     break
                 if not_required_value:
                     break
+                
                 data.append(row)
                 myLog(f"row: {i}",2)
             except:
