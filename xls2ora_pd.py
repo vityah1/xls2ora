@@ -1,4 +1,4 @@
-"""Utility for load [xls|xlsx|csv|html] to oracle table v.0.0.4
+"""Utility for load [xls|xlsx|csv|html] file to oracle table v.0.0.4
 
 Usage: xls2ora.exe file.ext|file.json
 
@@ -21,7 +21,22 @@ xls2ora.json =>
 "ora_user":"user",
 "ora_pwd":"password",
 "ora_dsn":"ora_dsn"
-}        
+}
+
+Create table mode:
+- oracle table will create as {ora_user}.tmp_{file} if {table_in} not set
+- oracle columns name wiil get from row with headers
+
+Only load data:
+- oracle columns name will get from oracle table if fields_in not set
+
+Common:
+cols (array) - load data only from countered columns
+truncate - delete or not data in table before load
+delete - delete with condition
+&filename - macros for replace
+required_col (array) - if data empty in this column the load will stop
+types (dict) - for correct load float|integer|number data
 """
 
 import os
@@ -242,11 +257,11 @@ def main():
                 return
 
         try:
-            ora_user=cfg.get('ora_user','')
+            ora_user=cfg.get('ora_user','cgi')
             ora_pwd=cfg.get('ora_pwd','')
             ora_dsn=cfg.get('ora_dsn','')
 
-            if any([ora_user,ora_pwd,ora_dsn]):
+            if all([ora_user,ora_pwd,ora_dsn]):
                 cursor=cnn2ora(ora_user=ora_user,ora_pwd=ora_pwd,ora_dsn=ora_dsn)        
         except:
             pass
@@ -254,7 +269,7 @@ def main():
         if create_table:
             # if not find xls2ora.json file
             extention=arg.split(".")[-1]
-            table_in=f"""cgi.tmp_{arg.replace(f'.{extention}','')}"""
+            table_in=f"""{ora_user}.tmp_{arg.replace(f'.{extention}','')}"""
             fields_in=''
             format=extention
             cols=[1]
@@ -312,6 +327,7 @@ def main():
 
         if not fields_in and create_table!=1:
             try:
+                myLog(f"fields_in not set so get fields from {table_in}",1)
                 fields_in,types=get_columns_name(table_in)
             except:
                 myLog("Error. Not set schema in table name",1)
@@ -370,6 +386,7 @@ def main():
             columns[-1]= columns[-1].replace(",","")
             columns.append(")")
             sql="".join(columns)
+            myLog(sql,1)
             res=request_api({"action":"sql","sql":sql})[0]
             if res<0:
                 myLog(f"error create table {table_in}")
