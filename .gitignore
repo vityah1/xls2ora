@@ -28,3 +28,6 @@ win_*
 *.xml
 *.css
 venv64/
+xls2ora.prohidna.json
+xls2ora.shtat.json
+xls2ora.py
