@@ -27,3 +27,4 @@ win_*
 *.htm
 *.xml
 *.css
+venv64/
