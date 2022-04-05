@@ -1,4 +1,4 @@
-"""Utility for load [xls|xlsx|csv|html] to oracle table v.0.0.3
+"""Utility for load [xls|xlsx|csv|html] to oracle table v.0.0.4
 
 Usage: xls2ora.exe file.ext|file.json
 
@@ -10,14 +10,17 @@ Example config file:
 xls2ora.json =>
 {
 *"table_in":"shtat.shtat_reports",
-*"fields_in":"pib,time_inout,rdate",
+"fields_in":"pib,time_inout,rdate",
 "file_in":"file.ext", * if arg file.json
 "cols":[2,3,"&filename"],
 "format":"html|xls|csv",
 "truncate":"Y|n",
 "delete":" rdate=\"&filename\"",
 "required_col":3,
-"types":{6:"float",7:"float",8:"float",9:"float",10:"float",11:"float",12:"float"}
+"types":{6:"float",7:"float",8:"float",9:"float",10:"float",11:"float",12:"float"},
+"ora_user":"user",
+"ora_pwd":"password",
+"ora_dsn":"ora_dsn"
 }        
 """
 
@@ -25,7 +28,6 @@ import os
 import sys
 import time
 import re
-# import pandas as pd
 from pandas import read_excel,read_csv,read_html,isnull
 import requests
 import cx_Oracle
@@ -33,10 +35,9 @@ from os import path
 import json
 import traceback
 from datetime import datetime
-from transliterate import translit
+# from transliterate import translit
 
 from funks import (
-    # file2arr,
     sendicqmsg,
     nm,
     decl_log,
@@ -44,6 +45,14 @@ from funks import (
     username,
     local_ip,
 )
+
+symbols = (u"абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ ієІЄ№/,.\"’'()qwertyuioplkjhgfdsazxcvbnm",
+    (*list(u'abvgdee'), 'zh', *list(u'zijklmnoprstuf'), 'kh', 'z', 'ch', 'sh', 'sh', '',
+    'y', '', 'e', 'yu','ya', *list(u'ABVGDEE'), 'ZH', 
+    *list(u'ZIJKLMNOPRSTUF'), 'KH', 'Z', 'CH', 'SH', 'SH', *list(u'_Y_E'), 'YU', 'YA', '_','i','ye','I','YE','npp','_','_','','','','','_','_',*list(u'qwertyuioplkjhgfdsazxcvbnm')))
+
+coding_dict = {source: dest for source, dest in zip(*symbols)}
+translate = lambda x: ''.join([coding_dict[i] for i in x])
 
 url_api = "http://10.9.19.15:5000/api"
 headers = {"Content-Type": "application/json; charset=ISO-8859-1"}
@@ -299,7 +308,11 @@ def main():
         #     format='xlsx'
 
         if not fields_in and create_table!=1:
-            fields_in,types=get_columns_name(table_in)
+            try:
+                fields_in,types=get_columns_name(table_in)
+            except:
+                myLog("Error. Not set schema in table name",1)
+                return
 
         cols_all='N'
         
@@ -337,14 +350,14 @@ def main():
 
         if cols_all=='Y' and not fields_in:
             fields=[]
-            fields=[translit(str(cell),'uk', reversed=True).lower().replace('№','npp')[:30].replace('/','_').replace('’','').replace(',','_').replace('.','').replace(' ','_').replace('"','').replace("'",'').replace('(','_').replace(')','_').strip() for cell in df.T.axes[0]]            
+            fields=[translate(str(cell).lower()).strip() for cell in df.T.axes[0]]            
             cols=[*range(1,len(fields)+1)]
 
         if create_table==1:
             maxColumnLenghts = []
             for col in range(len(df.columns)):
                 maxColumnLenghts.append(max(df.iloc[:,col].astype(str).apply(len)))
-            columns=[]
+            columns=[]  
 
             columns.append(f"create table {table_in} (")
             for i,col in enumerate(fields,0):
@@ -356,7 +369,8 @@ def main():
             sql="".join(columns)
             res=request_api({"action":"sql","sql":sql})[0]
             if res<0:
-                myLog(f"error create table {table_in}")            
+                myLog(f"error create table {table_in}")
+                fields_in,types=get_columns_name(table_in)            
 
         for i, df_row in df.iterrows():
             row=[]
