@@ -9,7 +9,7 @@ Example config file:
 
 xls2ora.json =>
 {
-*"table_in":"shtat.shtat_reports",
+"table_in":"shtat.shtat_reports",
 "fields_in":"pib,time_inout,rdate",
 "file_in":"file.ext", * if arg file.json
 "cols":[2,3,"&filename"],
@@ -99,7 +99,7 @@ def truncate_table(table_in="",delete=""):
     json={"action":"sql","sql":f"delete from {table_in} {um_delete}"}
     return request_api(json)[0]
 
-def ins_to_ora(data_in=[],table_in='',fields_in=''):
+def bulk_load(data_in=[],table_in='',fields_in=''):
     if not data_in or not table_in or not fields_in:
         return "empty input data"
     fields_in=[f.lower().strip() for f in fields_in.split(",")]
@@ -112,7 +112,7 @@ def ins_to_ora(data_in=[],table_in='',fields_in=''):
     return request_api(json_data)[0]
     # url = f"""http://127.0.0.1:5000/api"""
 
-def do_sql_cmd(json_data={}):
+def do_ora_cmd(json_data={}):
 
     global cursor
 
@@ -169,8 +169,11 @@ def request_api(json_data):
     json_data["user_ip"]= local_ip
 
     if cursor is not None:
-        return do_sql_cmd(json_data=json_data)
+        return do_ora_cmd(json_data=json_data)
+    
+    return do_api_cmd(json_data)
 
+def do_api_cmd(json_data):
     try:
         resp=requests.post(url_api,json=json_data, headers=headers,proxies=proxies)
     except Exception as e:
@@ -440,7 +443,7 @@ def main():
                 return            
 
         myLog(f"send data to {table_in}...",1)
-        res = ins_to_ora(data_in=data,table_in=table_in,fields_in=fields_in)
+        res = bulk_load(data_in=data,table_in=table_in,fields_in=fields_in)
         end = time.perf_counter()
 
         # total_time = sec2hours(sec)
