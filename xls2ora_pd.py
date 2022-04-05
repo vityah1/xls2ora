@@ -5,7 +5,6 @@ Usage: xls2ora.exe file.ext|file.json
 file.ext [xls|xlsx|csv|html]
 
 Example config file:
-* - required fields
 
 xls2ora.json =>
 {
