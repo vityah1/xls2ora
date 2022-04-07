@@ -8,7 +8,7 @@ https://sites.google.com/view/xls2ora/home
 ## Usage
 xls2ora.exe file|file.json
 - file - accept xls xlsx csv html file format
-- file.json - config file. Can be has a diff name.
+- file.json - config file. Can be has a different name.
 ### Example config file:
 ```json
 {
