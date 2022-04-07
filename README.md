@@ -34,9 +34,9 @@ xls2ora.json =>
 * oracle columns name will get from oracle table if fields_in not set
 
 ## Common:
-* cols (array) - load data only from countered columns
+* cols (array) - load data only from listed numbers of columns
 * truncate - delete or not data in table before load
 * delete - delete with condition
 * &filename - macros for replace
 * required_col (array) - if data empty in this column the load will stop
-* types (dict) - for correct load float|integer|number data
+* types (dict) {number of column:"float"} - for correct load float|integer|number data
