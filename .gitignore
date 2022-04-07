@@ -30,4 +30,5 @@ win_*
 venv64/
 xls2ora.prohidna.json
 xls2ora.shtat.json
-xls2ora.py
+xls2ora_api.py
+xls2ora_utils.py

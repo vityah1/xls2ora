@@ -1,4 +1,4 @@
-"""Utility for load [xls|xlsx|csv|html] file to oracle table v.0.0.4
+"""Utility for load [xls|xlsx|csv|html] file to oracle table v.0.0.5
 
 Usage: xls2ora.exe file.ext|file.json
 
@@ -22,20 +22,20 @@ xls2ora.json =>
 "ora_dsn":"ora_dsn"
 }
 
-Create table mode:
-- oracle table will create as {ora_user}.tmp_{file} if {table_in} not set
-- oracle columns name wiil get from row with headers
+## Create table mode:
+* oracle table will create as {ora_user}.tmp_{file} if {table_in} not set
+* oracle columns name wiil get from row with headers
 
-Only load data:
-- oracle columns name will get from oracle table if fields_in not set
+## Only load data:
+* oracle columns name will get from oracle table if fields_in not set
 
-Common:
-cols (array) - load data only from countered columns
-truncate - delete or not data in table before load
-delete - delete with condition
-&filename - macros for replace
-required_col (array) - if data empty in this column the load will stop
-types (dict) - for correct load float|integer|number data
+## Common:
+* cols (array) - load data only from listed numbers of columns
+* truncate - delete or not data in table before load
+* delete - delete with condition
+* &filename - macros for replace
+* required_col (array) - if data empty in this column the load will stop
+* types (dict) {number of column:"float"} - for correct load float|integer|number data
 """
 
 import os
@@ -43,7 +43,6 @@ import sys
 import time
 import re
 from pandas import read_excel,read_csv,read_html,isnull
-import requests
 import cx_Oracle
 from os import path
 import json
@@ -68,9 +67,6 @@ symbols = (u"абвгдеёжзийклмнопрстуфхцчшщъыьэюя�
 coding_dict = {source: dest for source, dest in zip(*symbols)}
 translate = lambda x: ''.join([coding_dict[i] for i in x])
 
-url_api = "http://10.9.19.15:5000/api"
-headers = {"Content-Type": "application/json; charset=ISO-8859-1"}
-proxies = {"http": "", "https": ""}
 valid_formats=['html','xls','xlsx','csv']
 cursor=None
 
@@ -184,34 +180,8 @@ def request_api(json_data):
 
     if cursor is not None:
         return do_ora_cmd(json_data=json_data)
+    return -1,[[]]
     
-    return do_api_cmd(json_data)
-
-def do_api_cmd(json_data):
-    try:
-        resp=requests.post(url_api,json=json_data, headers=headers,proxies=proxies)
-    except Exception as e:
-        myLog(f"error request api: {e}",1)
-        return -1,[]
-
-    myLog(f"resp.status: {resp.status_code}")
-    if resp.status_code != 200:
-        myLog(f"error resp.status: {resp.status_code}",1)
-        return -1,[]
-    else:
-        try:
-            data = resp.json()
-            if data["cnt"]<0:
-                myLog(f"""error exec sql: {data['result'][0][0]}""",1)
-                return -1,[]
-            else:
-                myLog(f"sql Ok: {data['cnt']} rows",1)
-                return data['cnt'],data['result']
-        except Exception as e:
-            myLog(f"""error get json: {e}""",1)
-            return -1,[]
-
-
 def main():
     try:
         myLog("BEGIN")
