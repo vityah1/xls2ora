@@ -1,8 +1,12 @@
 # xls2ora
+---
+Summary
+---
+Utility for load [xls|xlsx|csv|html] file to oracle table v.0.0.4
 
-## Utility for load [xls|xlsx|csv|html] file to oracle table v.0.0.4
-
-Usage: xls2ora.exe file.ext|file.json
+## Usage
+---
+xls2ora.exe file.ext|file.json
 
 file.ext [xls|xlsx|csv|html]
 
@@ -26,17 +30,26 @@ xls2ora.json =>
 }
 ```
 
-## Create table mode:
+## Create table mode
+---
 * oracle table will create as {ora_user}.tmp_{file} if {table_in} not set
 * oracle columns name wiil get from row with headers
-
-## Only load data:
+## Only load data
+---
 * oracle columns name will get from oracle table if fields_in not set
-
-## Common:
+## Common
+---
 * cols (array) - load data only from listed numbers of columns
 * truncate - delete or not data in table before load
 * delete - delete with condition
 * &filename - macros for replace
 * required_col (array) - if data empty in this column the load will stop
 * types (dict) {number of column:"float"} - for correct load float|integer|number data
+
+# Install
+---
+python -m venv venv
+venv/scripts/activate
+git clone https://github.com/vityah1/xls2ora
+cd xls2ora
+venv/scripts/pip3 install -r requirements.txt
