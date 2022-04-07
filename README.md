@@ -2,7 +2,7 @@
 xls2ora - Utility for load xls|xlsx|csv|html file to oracle table
 ## Summary
 utility to import a sheet from a xls|xlsx|csv|html file into an Oracle Database. 
-It is possible to create table, set fload columns, truncate table before load data
+It is possible to create table, set float columns, truncate table before load data
 ## Home Page
 https://sites.google.com/view/xls2ora/home
 ## Usage
@@ -29,7 +29,7 @@ xls2ora.exe file|file.json
 
 ### Create table mode
 * oracle table will create as {ora_user}.tmp_{file} if {table_in} not set
-* oracle columns name wiil get from row with headers
+* oracle columns name will get from row with headers
 ### Only load data
 * oracle columns name will get from oracle table if fields_in not set
 ### Common
