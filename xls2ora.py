@@ -51,7 +51,6 @@ from datetime import datetime
 # from transliterate import translit
 
 from funks import (
-    sendicqmsg,
     nm,
     decl_log,
     myLog,
@@ -203,7 +202,6 @@ def main():
         if not path.exists(arg):
             myLog(f"""Input file [{arg}] not exists\n""",1)
             print(usage)
-            sendicqmsg(1001,f"""Input file [{arg}] not exists""")
             return
 
         if arg.find(".json")>-1:
@@ -222,7 +220,6 @@ def main():
             except Exception as e:
                 myLog(f"""cfg json file [{json_file}] not valid\n{e}\n""",1)
                 print(usage)
-                sendicqmsg(1001,f"""cfg json file [{json_file}] not valid\n{e}""")
                 return
 
         try:
@@ -264,7 +261,6 @@ def main():
                         myLog(err,1)
                         print(err)
                         file_in=arg
-                        # sendicqmsg(1001,err)
                         # return
                 else:
                     file_in=arg
@@ -283,7 +279,6 @@ def main():
             except Exception as e:
                 myLog(f"""not valid parameters in xls2ora.json\n""",1)
                 print(usage)
-                sendicqmsg(1001,f"""not valid parameters in xls2ora.json\n{e}""")
                 return
         
         if format not in valid_formats:
@@ -325,7 +320,6 @@ def main():
                 df = read_csv(file_in)
         except Exception as e:
             myLog(f"""error open {file_in} file\n{e}\n""",1)
-            sendicqmsg(1001,f"""error {file_in} xls file\n{e}""")
             return                        
 
         cnt_rows = len(df)
@@ -436,13 +430,11 @@ def main():
 
         msg = f"""{filename} -> {table_in}, loaded rows: [{res}], total time: {end-start_time_main:0.7f} s\nresult: {res}"""
         myLog(msg,1)
-        sendicqmsg(1001,msg)
         myLog("END")  
         decl_log(tin="", cnt=cnt_rows, decl=nm)  
     except:
         e = traceback.format_exc()
         myLog(e,1)
-        sendicqmsg(1001,e)
 
 if __name__ == "__main__":
     main()

@@ -1,9 +1,7 @@
 import time
 import socket
 import datetime
-import requests
 import os
-import json
 from os import path
 import msvcrt
 import re
@@ -49,100 +47,18 @@ def file2arr(filename=None, sep=",")->list:
     else:
         ss=f"file2arr: Файл {filename} з вхідними даними НЕ знайдений."
         myLog(ss,1)
-        sendicqmsg(ss)
         return []
 
 
 def chkfl(fl):
     """check file stats for compare version exe file"""
-    if local_ip!='10.9.19.21':
-        try:
-            (mode, ino, dev, nlink, uid, gid, size, atime, mtime, ctime) = os.stat(fl)
-            return str(time.ctime(os.path.getmtime(fl))) + " " + str(size)
-        except Exception as e:
-            myLog(f"Error. Can not get stat about {fl}. {e} ")
-            return "v.unknown"
 
-def ora_sql(sql):
-    data = {
-        "action": "sql",
-        "sql": sql,
-        "src": nm,
-        "username": username,
-        "user_ip": local_ip,
-    }
-
-    zapyt = f"""http://10.9.19.15:5000/api"""
-
-    headers = {"Content-Type": "application/json; charset=ISO-8859-1"}
-    proxies = {"http": "", "https": ""}
     try:
-        r = requests.post(zapyt, json=data, headers=headers, proxies=proxies)
-        # myLog(r.status_code)
-        # myLog(r.text)
+        (mode, ino, dev, nlink, uid, gid, size, atime, mtime, ctime) = os.stat(fl)
+        return str(time.ctime(os.path.getmtime(fl))) + " " + str(size)
     except Exception as e:
-        myLog(f"""error {e}""",1)
-
-    res = json.loads(r.text)
-
-    # if "error" in res:
-    #     myLog("error api")
-
-    if res["cnt"] < 0:
-        return [-1]
-        # return [-1]
-
-    return res["result"][0]
-
-
-def ora_sql2(sql):
-    data = {
-        "action": "sql",
-        "sql": sql,
-        "src": nm,
-        "username": username,
-        "user_ip": local_ip,
-    }
-
-    zapyt = f"""http://10.9.19.15:5000/api"""
-
-    headers = {"Content-Type": "application/json; charset=ISO-8859-1"}
-    proxies = {"http": "", "https": ""}
-    try:
-        r = requests.post(zapyt, json=data, headers=headers, proxies=proxies)
-        # myLog(r.status_code)
-        # myLog(r.text)
-        res = json.loads(r.text)
-    except Exception as e:
-        myLog(f"""error api: {e}""",1)
-        res = {"cnt": -1, "result": f"{e}"}
-
-    return res
-
-
-def decl_log(tin="", cnt="0", decl=nm):
-    data = {
-        "tin": tin,
-        "cnt": cnt,
-        "decl": decl,
-        "action": "decl_log",
-        "src": f"{nm}.py",
-        "username": username,
-        "user_ip": local_ip,
-    }
-
-    url = f"""http://10.9.19.15:5000/api"""
-
-    headers = {"Content-Type": "application/json; charset=ISO-8859-1"}
-    proxies = {"http": "", "https": ""}
-    try:
-        r = requests.post(url, json=data, headers=headers, proxies=proxies)
-        myLog(r.status_code)
-        myLog(r.text)
-    except Exception as e:
-        # winsound.Beep(sound_info, sound_info_time)
-        myLog(f"""error {e}""",1)
-
+        myLog(f"Error. Can not get stat about {fl}. {e} ")
+        return "v.unknown"
 
 def sdatetime(dt=None):
     if dt is None:
@@ -193,30 +109,6 @@ def print1(txt):
             print(txt+" "*(len_line-len(txt)-1),end="\r")
 
 
-def sendicqmsg(to=1001,msg=""):
-    """send message to admin [icq:1001] by local icq server"""
-    if local_ip=='10.9.19.21':
-        return ""
-    data = {
-        "to": to,
-        "msg": f"""{nm}:\n{msg}\npath: [{curdir}]\nusername: [{username}], user_ip: [{local_ip}]""",
-        "from": "3",
-    }
-    url = f"""http://10.9.19.9:8080/siq/cgi-bin/sendicq_ole.cgi"""
-
-    # headers={'Content-Type':'text/html; charset=ISO-8859-1'}
-    headers = {"Content-Type": "text/html; charset=windows-1251"}
-    proxies = {"http": "", "https": ""}
-    try:
-        r = requests.get(url, params=data, headers=headers, proxies=proxies)
-        if r.status_code == 200:
-            myLog("icq message send...")
-        else:
-            myLog(f"""error send icq msg. status_code: {r.status_code}""")
-    except:
-        myLog("Error send icq message")
-
-
 def sec2hours(ss=None):
     """convert secunds to days hours:minutes:secunds"""
     if ss == None:
@@ -231,24 +123,6 @@ def sec2hours(ss=None):
         # return "%d:%02d:%02d" % (((ss // 3600)) % 24, (ss // 60) % 60, ss % 60)
     else:
         return ""
-
-
-def check_work_time():
-    """Перевірка чи робочий час"""
-
-    currtime = datetime.datetime.now().strftime("%H:%M")
-    if currtime >= "07:00" and currtime <= "22:59":
-        pass
-    elif local_ip=='10.9.19.21':
-        pass    
-    else:
-        ss=f"""ini_driver: Занадто пізно {currtime} для роботи. час відпочивати...\n"""
-        myLog(ss,1)
-        sendicqmsg(ss)
-        # os._exit(1)
-        return False
-    return True
-
 
 def mywait(total_wait=0):
     """Чекаємо задану к-сть секунд з реагуванням на натиснуту клавішу. Виходимо або продовжуємо"""
